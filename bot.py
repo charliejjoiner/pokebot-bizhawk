@@ -34,6 +34,8 @@ from data.GameState import GameState
 from data.MapData import mapRSE #mapFRLG
 # Data processing
 import pandas as pd
+# Discord Webhooks
+from discord_webhook import DiscordWebhook, DiscordEmbed
 
 no_sleep_abilities = ["Shed Skin", "Insomnia", "Vital Spirit"]
 pickup_pokemon = ["Meowth", "Aipom", "Phanpy", "Teddiursa", "Zigzagoon", "Linoone"]
@@ -849,6 +851,30 @@ def log_encounter(pokemon: dict):
             stats["pokemon"][mon_name]["phase_encounters"] = 0
 
         write_file("stats/totals.json", json.dumps(stats, indent=4, sort_keys=True)) # Save stats file
+
+        if config["discord_webhook_url"]:
+            debug_log.info("Sending Discord ping...")
+            if config["discord_shiny_ping"] and config["discord_ping_mode"] == "role": # Thanks Discord for making role and user IDs use the same format, but have different syntaxes for pinging them by ID, really cool.
+                content=f"<@&{config['discord_shiny_ping']}>"
+            elif config["discord_ping_mode"] == "user":
+                content=f"<@{config['discord_shiny_ping']}>"
+            else:
+                content="" # It breaks if I don't do this, sorry.
+            webhook = DiscordWebhook(url=config["discord_webhook_url"], content=content)
+            embed = DiscordEmbed(title='Shiny encountered!', description=f"{pokemon['name']} at {pokemon['metLocationName']}", color='ffd242')
+            embed.set_footer(text='PokeBot')
+            embed.set_timestamp()
+            embed.add_embed_field(name='Shiny Value', value=f"{pokemon['shinyValue']:,}")
+            embed.add_embed_field(name='Nature', value=f"{pokemon['nature']}")
+            embed.add_embed_field(name='IVs', value=f"HP: {pokemon['hpIV']} | ATK: {pokemon['attackIV']} | DEF: {pokemon['defenseIV']} | SPATK: {pokemon['spAttackIV']} | SPDEF: {pokemon['spDefenseIV']} | SPE: {pokemon['speedIV']}", inline=False)
+            embed.add_embed_field(name='Species Phase Encounters', value=f"{stats['pokemon'][mon_name]['phase_encounters']}")
+            embed.add_embed_field(name='All Phase Encounters', value=f"{stats['totals']['phase_encounters']}")
+            with open(f"interface/sprites/pokemon/shiny/{pokemon['name']}.png", "rb") as shiny:
+                webhook.add_file(file=shiny.read(), filename='shiny.png')
+            embed.set_thumbnail(url='attachment://shiny.png')
+            webhook.add_embed(embed)
+            webhook.execute(remove_embeds=True)
+
     else:
         debug_log.info("Non shiny Pokemon detected...")
 
